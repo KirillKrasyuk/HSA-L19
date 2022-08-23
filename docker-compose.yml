@@ -1,0 +1,128 @@
+version: '3.6'
+
+services:
+  telegraf:
+    image: telegraf:1.18-alpine
+    hostname: telegraf-1
+    container_name: telegraf-1
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+    privileged: true
+    user: root
+    depends_on:
+      - influxdb
+    links:
+      - influxdb
+    ports:
+      - "127.0.0.1:8125:8125/udp"
+
+  influxdb:
+    image: influxdb:1.8-alpine
+    hostname: influxdb-1
+    container_name: influxdb-1
+    env_file: configuration.env
+    ports:
+      - "127.0.0.1:8086:8086"
+    volumes:
+      - ./:/imports
+      - influxdb_data:/var/lib/influxdb
+
+  grafana:
+    image: grafana/grafana:8.0.2
+    hostname: grafana-1
+    container_name: grafana-1
+    depends_on:
+      - influxdb
+    env_file: configuration.env
+    links:
+      - influxdb
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+      - ./grafana/dashboards/:/var/lib/grafana/dashboards/
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    container_name: postgres-exporter
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://user:mypass@postgres-b:5432/db?sslmode=disable"
+    links:
+      - postgres-b
+      - prometheus
+
+  postgres-b:
+    image: postgres:14.4
+    container_name: postgres-b
+    environment:
+      PGDATA: /pgdata
+      POSTGRES_DB: db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: mypass
+    ports:
+      - "54321:5432"
+    volumes:
+      - pg_data:/pgdata
+
+  postgres-b1:
+    image: postgres:14.4
+    container_name: postgres-b1
+    environment:
+      PGDATA: /pgdata
+      POSTGRES_DB: db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: mypass
+    ports:
+      - "54322:5432"
+    volumes:
+      - pg_data_1:/pgdata
+
+  postgres-b2:
+    image: postgres:14.4
+    container_name: postgres-b2
+    environment:
+      PGDATA: /pgdata
+      POSTGRES_DB: db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: mypass
+    ports:
+      - "54323:5432"
+    volumes:
+      - pg_data_2:/pgdata
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: app-1
+    ports:
+      - "9000:9000"
+    env_file: configuration.env
+    working_dir: /var/www
+    volumes:
+      - ./php:/var/www
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+
+networks:
+  application:
+    driver: bridge
+
+volumes:
+  grafana_data: {}
+  influxdb_data: {}
+  prometheus_data: {}
+  pg_data: {}
+  pg_data_1: {}
+  pg_data_2: {}
